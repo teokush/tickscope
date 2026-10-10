@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tickscope</title>
+<meta name="description" content="Live last-digit analysis for Deriv synthetic indices. Analysis only, no trading and no login.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow-first column on phones; controls and live price sit side by side from 720px; the three analysers sit in a row from 960px. */
+:root {
+  --bg: #f1f4f6;
+  --surface: #ffffff;
+  --ink: #12202b;
+  --muted: #566677;
+  --line: #dbe2e8;
+  --track: #e6ebef;
+  --accent: #0b6f8f;
+  --accent-ink: #ffffff;
+  --good: #0e8a5a;
+  --bad: #d03a36;
+  --warn: #c97a0c;
+  --blue: #2b5fd9;
+  --neutral: #6f7d8b;
+  --ring: rgba(11, 111, 143, 0.28);
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c1217;
+    --surface: #141c23;
+    --ink: #e5ecf2;
+    --muted: #92a1ae;
+    --line: #25303a;
+    --track: #212c36;
+    --accent: #4cc3e0;
+    --accent-ink: #06222b;
+    --good: #2fc58a;
+    --bad: #f06a64;
+    --warn: #f0a23a;
+    --blue: #6f93ff;
+    --neutral: #7d8c9a;
+    --ring: rgba(76, 195, 224, 0.35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c1217;
+  --surface: #141c23;
+  --ink: #e5ecf2;
+  --muted: #92a1ae;
+  --line: #25303a;
+  --track: #212c36;
+  --accent: #4cc3e0;
+  --accent-ink: #06222b;
+  --good: #2fc58a;
+  --bad: #f06a64;
+  --warn: #f0a23a;
+  --blue: #6f93ff;
+  --neutral: #7d8c9a;
+  --ring: rgba(76, 195, 224, 0.35);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 var(--f-body);
+  padding-inline: 16px;
+  padding-block: 0 40px;
+}
+.wrap { max-width: 1080px; margin-inline: auto; }
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+/* header */
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 18px 14px; }
+.brand { display: flex; flex-direction: column; min-width: 0; }
+.brand h1 { margin: 0; font: 700 22px/1.1 var(--f-display); letter-spacing: -0.01em; }
+.brand span { color: var(--muted); font-size: 13px; }
+.themebtn {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 8px;
+  padding: 7px 12px; cursor: pointer; font-size: 13px; color: var(--muted); white-space: nowrap;
+}
+.themebtn:hover { color: var(--ink); border-color: var(--muted); }
+
+/* surfaces */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; min-width: 0; }
+.card h2 { margin: 0 0 14px; font: 600 17px/1.2 var(--f-display); letter-spacing: -0.005em; }
+.label { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+
+.top { display: grid; grid-template-columns: 1fr; gap: 16px; margin-bottom: 16px; }
+.grid3 { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 16px; }
+@media (min-width: 720px) { .top { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 960px) { .grid3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* controls */
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.field:last-child { margin-bottom: 0; }
+select, input[type="number"] {
+  width: 100%; min-height: 42px; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--bg);
+}
+.winrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.winrow input { width: 110px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  border: 1px solid var(--line); background: transparent; border-radius: 999px;
+  padding: 5px 11px; font: 500 12px var(--f-mono); cursor: pointer; color: var(--muted);
+}
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.check input { width: 16px; height: 16px; accent-color: var(--accent); }
+
+/* live price */
+.live { display: flex; flex-direction: column; gap: 14px; }
+.pricebox {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: var(--bg); border-radius: 10px; padding: 16px 18px;
+}
+.price { font: 600 clamp(26px, 7vw, 34px)/1 var(--f-mono); letter-spacing: -0.02em; min-width: 0; overflow-wrap: anywhere; }
+.lastdigit { font: 600 clamp(34px, 9vw, 44px)/1 var(--f-mono); color: var(--blue); }
+.status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--neutral); flex: none; }
+.dot.live { background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent); }
+.dot.wait { background: var(--warn); }
+.dot.bad { background: var(--bad); }
+.dot.demo { background: var(--blue); }
+.notice {
+  display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center;
+  border: 1px solid var(--bad); border-radius: 8px; padding: 10px 12px; font-size: 13px;
+}
+.notice[hidden] { display: none; }
+.notice button {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 6px;
+  padding: 5px 10px; cursor: pointer; font-size: 13px;
+}
+.notice button:hover { border-color: var(--muted); }
+
+/* digit distribution */
+.dhead { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+.dhead h2 { margin: 0; }
+.badge { background: var(--bg); border-radius: 6px; padding: 4px 10px; font: 500 13px var(--f-mono); color: var(--muted); }
+.digits { display: grid; grid-template-columns: repeat(5, 1fr); gap: 18px 8px; justify-items: center; }
+.dg {
+  position: relative; width: 100%; max-width: 78px; aspect-ratio: 1; border-radius: 50%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border: 2px solid var(--line); background: var(--surface); line-height: 1.1;
+}
+.dg .n { font: 600 20px var(--f-mono); }
+.dg .p { font: 500 11px var(--f-mono); color: var(--muted); margin-top: 2px; }
+.dg.most { background: var(--good); border-color: var(--good); color: #fff; }
+.dg.hi { background: var(--blue); border-color: var(--blue); color: #fff; }
+.dg.least { background: var(--bad); border-color: var(--bad); color: #fff; }
+.dg.lo { background: var(--warn); border-color: var(--warn); color: #fff; }
+.dg.most .p, .dg.hi .p, .dg.least .p, .dg.lo .p { color: rgba(255,255,255,0.92); }
+.dg.cur { box-shadow: 0 0 0 4px var(--ring); }
+.dg.cur::before {
+  content: ""; position: absolute; left: 50%; top: -13px; transform: translateX(-50%);
+  border: 6px solid transparent; border-top: 8px solid var(--accent); border-bottom: 0;
+}
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: center; margin-top: 18px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+
+/* rows with bars */
+.row { margin-bottom: 14px; }
+.rl { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.rl > span:first-child { font-weight: 500; }
+.rv { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.rv b { font-weight: 600; font-size: 18px; }
+.rv em { font-style: normal; color: var(--muted); font-size: 13px; margin-left: 6px; }
+.bar { position: relative; height: 8px; border-radius: 4px; background: var(--track); }
+.bar i { position: absolute; inset: 0 auto 0 0; border-radius: 4px; width: 0; transition: width 0.25s ease; }
+.bar .mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); opacity: 0.55; border-radius: 1px; }
+.f-good { background: var(--good); } .f-bad { background: var(--bad); } .f-neutral { background: var(--neutral); }
+.f-warn { background: var(--warn); } .f-blue { background: var(--blue); }
+.note { margin: -4px 0 14px; font-size: 12px; color: var(--muted); }
+.note .mk { display: inline-block; width: 2px; height: 10px; background: var(--ink); opacity: 0.55; margin-right: 6px; vertical-align: -1px; }
+
+.sel { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.sel label { font-weight: 500; white-space: nowrap; }
+.sel select { max-width: 120px; }
+
+.rhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 18px 0 10px; }
+.rhead .t { font-weight: 600; }
+.rhead .run { font-size: 12px; color: var(--muted); font-family: var(--f-mono); }
+.morebtn {
+  border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink);
+  border-radius: 6px; padding: 3px 11px; font-size: 12px; font-weight: 500; cursor: pointer;
+}
+.dots { display: flex; flex-wrap: wrap; gap: 5px; min-height: 22px; }
+.d {
+  width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  font: 600 10px var(--f-mono); color: #fff; flex: none;
+}
+.d.good { background: var(--good); } .d.bad { background: var(--bad); } .d.neutral { background: var(--neutral); }
+.d.warn { background: var(--warn); }
+.d.hollow { background: transparent; color: var(--muted); border: 1.5px solid var(--line); }
+.d.new { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+.extra { margin-top: 14px; font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 2px; }
+.extra b { color: var(--ink); font-family: var(--f-mono); font-weight: 600; }
+
+footer { margin-top: 24px; font-size: 12.5px; color: var(--muted); max-width: 70ch; }
+footer p { margin: 0 0 6px; }
+
+@media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>Tickscope</h1>
+      <span>Deriv last-digit analysis. No trading, no login.</span>
+    </div>
+    <button class="themebtn" id="themebtn" type="button">Theme: Auto</button>
+  </header>
+
+  <main>
+    <section class="top">
+      <div class="card">
+        <div class="field">
+          <label class="label" for="market">Market</label>
+          <select id="market"></select>
+        </div>
+        <div class="field">
+          <label class="label" for="win">Ticks window (50 to 5000)</label>
+          <div class="winrow">
+            <input id="win" type="number" min="50" max="5000" step="50" value="1000" inputmode="numeric">
+            <div class="chips" id="chips">
+              <button class="chip" type="button" data-w="100" aria-pressed="false">100</button>
+              <button class="chip" type="button" data-w="500" aria-pressed="false">500</button>
+              <button class="chip" type="button" data-w="1000" aria-pressed="true">1000</button>
+              <button class="chip" type="button" data-w="5000" aria-pressed="false">5000</button>
+            </div>
+          </div>
+        </div>
+        <label class="check"><input type="checkbox" id="demo"> Use simulated ticks instead of Deriv</label>
+      </div>
+
+      <div class="card live">
+        <div class="label">Latest tick</div>
+        <div class="pricebox">
+          <div class="price" id="price">--</div>
+          <div class="lastdigit" id="lastdigit" aria-label="Last digit">-</div>
+        </div>
+        <div class="status"><span class="dot wait" id="sdot"></span><span id="stext">Connecting</span><span id="parity" class="num"></span></div>
+        <div class="notice" id="notice" hidden>
+          <span id="ntext"></span>
+          <button type="button" id="retry">Retry</button>
+          <button type="button" id="usedemo">Use simulated ticks</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="dd">
+      <div class="dhead">
+        <h2 id="dd">Last <span id="ddn">1000</span> ticks digit distribution</h2>
+        <span class="badge" id="wincount">0/1000</span>
+      </div>
+      <div class="digits" id="digits"></div>
+      <div class="legend">
+        <span><i style="background:var(--accent)"></i>current digit</span>
+        <span><i style="background:var(--good)"></i>most</span>
+        <span><i style="background:var(--blue)"></i>next most</span>
+        <span><i style="background:var(--warn)"></i>next least</span>
+        <span><i style="background:var(--bad)"></i>least frequency</span>
+      </div>
+    </section>
+
+    <section class="grid3">
+      <!-- Even / Odd -->
+      <div class="card">
+        <h2>Even / Odd</h2>
+        <div class="row">
+          <div class="rl"><span>Even</span><span class="rv"><b id="e-n">0</b><em id="e-p">0%</em></span></div>
+          <div class="bar"><i class="f-good" id="e-f"></i><span class="mark" id="e-x"></span></div>
+        </div>
+        <div class="row">
+          <div class="rl"><span>Odd</span><span class="rv"><b id="o-n">0</b><em id="o-p">0%</em></span></div>
+          <div class="bar"><i class="f-bad" id="o-f"></i><span class="mark" id="o-x"></span></div>
+        </div>
+        <div class="note"><span class="mk"></span>Marker shows the expected share if digits are even.</div>
+        <div class="rhead"><span class="t">Recent E/O</span><span class="run" id="eo-run"></span><button class="morebtn" type="button" id="eo-more">More</button></div>
+        <div class="dots" id="eo-dots"></div>
+      </div>
+
+      <!-- Over / Under -->
+      <div class="card">
+        <h2>Over / Under</h2>
+        <div class="sel"><label for="barrier">Barrier digit</label><select id="barrier"></select></div>
+        <div class="row">
+          <div class="rl"><span>Under</span><span class="rv"><b id="u-n">0</b><em id="u-p">0%</em></span></div>
+          <div class="bar"><i class="f-good" id="u-f"></i><span class="mark" id="u-x"></span></div>
+        </div>
+        <div class="row">
+          <div class="rl"><span>Equal</span><span class="rv"><b id="q-n">0</b><em id="q-p">0%</em></span></div>
+          <div class="bar"><i class="f-neutral" id="q-f"></i><span class="mark" id="q-x"></span></div>
+        </div>
+        <div class="row">
+          <div class="rl"><span>Over</span><span class="rv"><b id="v-n">0</b><em id="v-p">0%</em></span></div>
+          <div class="bar"><i class="f-bad" id="v-f"></i><span class="mark" id="v-x"></span></div>
+        </div>
+        <div class="note"><span class="mk"></span>Marker shows the expected share for this barrier.</div>
+        <div class="rhead"><span class="t">Recent U/=/O</span><span class="run" id="ou-run"></span><button class="morebtn" type="button" id="ou-more">More</button></div>
+        <div class="dots" id="ou-dots"></div>
+      </div>
+
+      <!-- Matches / Differs -->
+      <div class="card">
+        <h2>Matches / Differs</h2>
+        <div class="sel"><label for="mdigit">Prediction digit</label><select id="mdigit"></select></div>
+        <div class="row">
+          <div class="rl"><span>Matches</span><span class="rv"><b id="m-n">0</b><em id="m-p">0%</em></span></div>
+          <div class="bar"><i class="f-warn" id="m-f"></i><span class="mark" id="m-x"></span></div>
+        </div>
+        <div class="row">
+          <div class="rl"><span>Differs</span><span class="rv"><b id="x-n">0</b><em id="x-p">0%</em></span></div>
+          <div class="bar"><i class="f-blue" id="x-f"></i><span class="mark" id="x-x"></span></div>
+        </div>
+        <div class="note"><span class="mk"></span>Marker shows the expected share: 10% match, 90% differ.</div>
+        <div class="rhead"><span class="t">Recent M/D</span><span class="run" id="md-run"></span><button class="morebtn" type="button" id="md-more">More</button></div>
+        <div class="dots" id="md-dots"></div>
+        <div class="extra">
+          <span>Last match: <b id="md-since">-</b></span>
+          <span>Longest gap in window: <b id="md-gap">-</b></span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Analysis only. This page never places trades, never asks you to log in, and only reads public tick data.</p>
+    <p>Deriv's synthetic indices produce random digits. A digit that has been rare lately is not more likely next. Treat these counts as a description of the past, and never risk money you cannot afford to lose.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // Deriv's current public endpoint (no login needed) first, the older v3 endpoint as a fallback.
+  var ENDPOINTS = [
+    'wss://api.derivws.com/trading/v1/options/ws/public',
+    'wss://ws.derivws.com/websockets/v3?app_id=1089'
+  ];
+  var epIdx = 0, tried = 0;
+  var MAX = 5000;
+  var LESS = 50, MORE = 200;
+  var MARKETS = [
+    ['Volatility (1s)', [['1HZ10V', 'Volatility 10 (1s) Index'], ['1HZ15V', 'Volatility 15 (1s) Index'], ['1HZ25V', 'Volatility 25 (1s) Index'], ['1HZ30V', 'Volatility 30 (1s) Index'], ['1HZ50V', 'Volatility 50 (1s) Index'], ['1HZ75V', 'Volatility 75 (1s) Index'], ['1HZ90V', 'Volatility 90 (1s) Index'], ['1HZ100V', 'Volatility 100 (1s) Index']]],
+    ['Volatility', [['R_10', 'Volatility 10 Index'], ['R_25', 'Volatility 25 Index'], ['R_50', 'Volatility 50 Index'], ['R_75', 'Volatility 75 Index'], ['R_100', 'Volatility 100 Index']]],
+    ['Jump', [['JD10', 'Jump 10 Index'], ['JD25', 'Jump 25 Index'], ['JD50', 'Jump 50 Index'], ['JD75', 'Jump 75 Index'], ['JD100', 'Jump 100 Index']]],
+    ['Boom and Crash', [['BOOM1000', 'Boom 1000 Index'], ['BOOM500', 'Boom 500 Index'], ['CRASH1000', 'Crash 1000 Index'], ['CRASH500', 'Crash 500 Index']]]
+  ];
+
+  var st = { symbol: '1HZ10V', win: 1000, barrier: 5, mdigit: 5, more: { eo: false, ou: false, md: false },
+             buf: [], pip: 2, price: null, demo: false, theme: 'auto' };
+
+  function $(id) { return document.getElementById(id); }
+  function load(k) { try { return localStorage.getItem('tickscope.' + k); } catch (e) { return null; } }
+  function save(k, v) { try { localStorage.setItem('tickscope.' + k, String(v)); } catch (e) {} }
+
+  /* ---------- build static UI ---------- */
+  var marketSel = $('market');
+  MARKETS.forEach(function (g) {
+    var og = document.createElement('optgroup'); og.label = g[0];
+    g[1].forEach(function (m) { var o = document.createElement('option'); o.value = m[0]; o.textContent = m[1]; og.appendChild(o); });
+    marketSel.appendChild(og);
+  });
+  ['barrier', 'mdigit'].forEach(function (id) {
+    for (var i = 0; i <= 9; i++) { var o = document.createElement('option'); o.value = i; o.textContent = i; $(id).appendChild(o); }
+  });
+  var digitsEl = $('digits'), dg = [];
+  for (var i = 0; i <= 9; i++) {
+    var d = document.createElement('div'); d.className = 'dg';
+    d.innerHTML = '<span class="n">' + i + '</span><span class="p">0.0%</span>';
+    digitsEl.appendChild(d); dg.push(d);
+  }
+
+  /* ---------- saved settings ---------- */
+  var sv = load('symbol'); if (sv && marketSel.querySelector('option[value="' + sv + '"]')) st.symbol = sv;
+  var sw = parseInt(load('win'), 10); if (sw >= 50 && sw <= MAX) st.win = sw;
+  var sb = parseInt(load('barrier'), 10); if (sb >= 0 && sb <= 9) st.barrier = sb;
+  var sm = parseInt(load('mdigit'), 10); if (sm >= 0 && sm <= 9) st.mdigit = sm;
+  var th = load('theme'); if (th === 'light' || th === 'dark') st.theme = th;
+  marketSel.value = st.symbol; $('barrier').value = st.barrier; $('mdigit').value = st.mdigit;
+
+  /* ---------- theme ---------- */
+  function applyTheme() {
+    var r = document.documentElement;
+    if (st.theme === 'auto') r.removeAttribute('data-theme'); else r.setAttribute('data-theme', st.theme);
+    $('themebtn').textContent = 'Theme: ' + (st.theme === 'auto' ? 'Auto' : st.theme === 'light' ? 'Light' : 'Dark');
+  }
+  $('themebtn').addEventListener('click', function () {
+    st.theme = st.theme === 'auto' ? 'light' : st.theme === 'light' ? 'dark' : 'auto';
+    save('theme', st.theme); applyTheme();
+  });
+  applyTheme();
+
+  /* ---------- data helpers ---------- */
+  function decimals(p) { var s = String(p), i = s.indexOf('.'); return i < 0 ? 0 : s.length - i - 1; }
+  function digitOf(p) { var s = Number(p).toFixed(st.pip); return s.charCodeAt(s.length - 1) - 48; }
+  function pushDigit(p) { st.buf.push(digitOf(p)); if (st.buf.length > MAX) st.buf.shift(); st.price = Number(p); }
+
+  /* ---------- status ---------- */
+  function setStatus(kind, text) {
+    $('sdot').className = 'dot ' + kind;
+    $('stext').textContent = text;
+  }
+  function showNotice(msg) { $('ntext').textContent = msg; $('notice').hidden = false; }
+  function hideNotice() { $('notice').hidden = true; }
+
+  /* ---------- connection ---------- */
+  var ws = null, session = 0, retryN = 0, retryTimer = 0, connTimer = 0, demoTimer = 0, pingTimer = 0;
+
+  function stop() {
+    session++;
+    clearTimeout(retryTimer); clearTimeout(connTimer); clearInterval(demoTimer); clearInterval(pingTimer);
+    if (ws) { ws.onopen = ws.onmessage = ws.onclose = ws.onerror = null; try { ws.close(); } catch (e) {} ws = null; }
+  }
+  function start() {
+    stop(); hideNotice(); retryN = 0; tried = 0;
+    st.buf = []; st.price = null; schedule();
+    if (st.demo) startDemo(); else startLive();
+  }
+
+  function startLive() {
+    var my = session;
+    setStatus('wait', 'Connecting to Deriv');
+    try { ws = new WebSocket(ENDPOINTS[epIdx]); } catch (e) { nextEndpoint(my); return; }
+    clearTimeout(connTimer);
+    connTimer = setTimeout(function () { if (my === session && !st.buf.length) nextEndpoint(my); }, 8000);
+    ws.onopen = function () {
+      if (my !== session) return;
+      ws.send(JSON.stringify({ ticks_history: st.symbol, adjust_start_time: 1, count: MAX, end: 'latest', style: 'ticks', subscribe: 1 }));
+      clearInterval(pingTimer);
+      pingTimer = setInterval(function () { try { if (ws && ws.readyState === 1) ws.send('{"ping":1}'); } catch (e) {} }, 30000);
+    };
+    ws.onmessage = function (e) {
+      if (my !== session) return;
+      var m; try { m = JSON.parse(e.data); } catch (x) { return; }
+      if (m.error) {
+        if (!st.buf.length) { showNotice('Deriv replied: ' + (m.error.message || m.error.code || 'unknown error') + ' (' + ENDPOINTS[epIdx] + ')'); }
+        setStatus('bad', m.error.message || 'Deriv returned an error');
+        return;
+      }
+      if (m.msg_type === 'history' && m.history) {
+        var prices = m.history.prices || [];
+        var pip = m.pip_size;
+        if (typeof pip !== 'number') { pip = 0; prices.forEach(function (p) { pip = Math.max(pip, decimals(p)); }); }
+        st.pip = pip;
+        st.buf = prices.map(digitOf);
+        if (prices.length) st.price = Number(prices[prices.length - 1]);
+        retryN = 0; hideNotice(); setStatus('live', 'Live from Deriv'); schedule();
+      } else if (m.msg_type === 'tick' && m.tick) {
+        if (typeof m.tick.pip_size === 'number') st.pip = m.tick.pip_size;
+        pushDigit(m.tick.quote); schedule();
+      }
+    };
+    ws.onclose = function () {
+      if (my !== session) return;
+      clearInterval(pingTimer);
+      if (!st.buf.length) { nextEndpoint(my); return; }
+      setStatus('wait', 'Reconnecting');
+      retryN++;
+      retryTimer = setTimeout(startLive, Math.min(1000 * Math.pow(2, retryN), 15000));
+    };
+  }
+  // Switch to the other endpoint when one never delivers data. Gives up after trying each twice.
+  function nextEndpoint(my) {
+    if (my !== session) return;
+    clearTimeout(connTimer); clearTimeout(retryTimer); clearInterval(pingTimer);
+    if (ws) { ws.onopen = ws.onmessage = ws.onclose = ws.onerror = null; try { ws.close(); } catch (e) {} ws = null; }
+    tried++;
+    if (tried >= ENDPOINTS.length * 2) { fail(my); return; }
+    epIdx = (epIdx + 1) % ENDPOINTS.length;
+    setStatus('wait', 'Connecting to Deriv');
+    retryTimer = setTimeout(startLive, 600);
+  }
+  function fail(my) {
+    if (my !== session) return;
+    clearTimeout(connTimer); clearTimeout(retryTimer);
+    if (ws) { ws.onopen = ws.onmessage = ws.onclose = ws.onerror = null; try { ws.close(); } catch (e) {} ws = null; }
+    setStatus('bad', 'Not connected');
+    showNotice('Could not reach Deriv. Check your internet connection, then retry. You can also look around with simulated ticks.');
+  }
+
+  function startDemo() {
+    var my = session, p = 9459.85, pip = 2;
+    st.pip = pip;
+    function step() { p += (Math.random() + Math.random() + Math.random() - 1.5) * 0.9; return Math.round(p * 100) / 100; }
+    for (var i = 0; i < MAX; i++) pushDigit(step());
+    setStatus('demo', 'Simulated ticks, not real market data');
+    schedule();
+    demoTimer = setInterval(function () { if (my !== session) return; pushDigit(step()); schedule(); }, 1000);
+  }
+
+  /* ---------- rendering ---------- */
+  var raf = 0;
+  function schedule() { if (!raf) raf = requestAnimationFrame(render); }
+
+  function setRow(k, c, n, exp) {
+    var p = n ? c / n * 100 : 0;
+    $(k + '-n').textContent = c;
+    $(k + '-p').textContent = p.toFixed(1) + '%';
+    $(k + '-f').style.width = p + '%';
+    $(k + '-x').style.left = 'calc(' + exp + '% - 1px)';
+  }
+  function dots(el, items) {
+    var h = '', last = items.length - 1;
+    for (var i = 0; i < items.length; i++) {
+      h += '<span class="d ' + items[i][0] + (i === last ? ' new' : '') + '">' + items[i][1] + '</span>';
+    }
+    el.innerHTML = h;
+  }
+  function runText(items, names) {
+    if (!items.length) return '';
+    var t = items[items.length - 1][1], c = 0;
+    for (var i = items.length - 1; i >= 0 && items[i][1] === t; i--) c++;
+    return c + 'x ' + names[t];
+  }
+
+  function render() {
+    raf = 0;
+    var total = st.buf.length, n = Math.min(st.win, total);
+    var s = n ? st.buf.slice(-n) : [];
+    $('wincount').textContent = n + '/' + st.win;
+    $('ddn').textContent = st.win;
+
+    // latest tick
+    if (total) {
+      var cur = st.buf[total - 1];
+      $('price').textContent = st.price.toFixed(st.pip);
+      $('lastdigit').textContent = cur;
+      $('parity').textContent = ' · ' + (cur % 2 === 0 ? 'Even' : 'Odd') + (cur > st.barrier ? ' · Over ' + st.barrier : cur < st.barrier ? ' · Under ' + st.barrier : ' · Equal ' + st.barrier);
+    } else {
+      $('price').textContent = '--'; $('lastdigit').textContent = '-'; $('parity').textContent = '';
+    }
+
+    // digit counts
+    var cnt = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], i;
+    for (i = 0; i < s.length; i++) cnt[s[i]]++;
+    var order = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].sort(function (a, b) { return cnt[b] - cnt[a] || a - b; });
+    var max = cnt[order[0]], min = cnt[order[9]], cls = {};
+    if (n) {
+      order.forEach(function (d) { if (cnt[d] === max) cls[d] = 'most'; });
+      if (min < max) order.forEach(function (d) { if (cnt[d] === min) cls[d] = 'least'; });
+      var k = 0;
+      for (i = 0; i < 10 && k < 2; i++) if (!cls[order[i]]) { cls[order[i]] = 'hi'; k++; }
+      for (i = 9; i >= 0; i--) if (!cls[order[i]]) { cls[order[i]] = 'lo'; break; }
+    }
+    for (i = 0; i < 10; i++) {
+      dg[i].className = 'dg' + (cls[i] ? ' ' + cls[i] : '') + (total && st.buf[total - 1] === i ? ' cur' : '');
+      dg[i].lastChild.textContent = (n ? cnt[i] / n * 100 : 0).toFixed(1) + '%';
+    }
+
+    // even / odd
+    var even = 0, under = 0, equal = 0, over = 0, match = 0, b = st.barrier, md = st.mdigit;
+    for (i = 0; i < s.length; i++) {
+      var v = s[i];
+      if (v % 2 === 0) even++;
+      if (v < b) under++; else if (v === b) equal++; else over++;
+      if (v === md) match++;
+    }
+    setRow('e', even, n, 50); setRow('o', n - even, n, 50);
+    setRow('u', under, n, b * 10); setRow('q', equal, n, 10); setRow('v', over, n, (9 - b) * 10);
+    setRow('m', match, n, 10); setRow('x', n - match, n, 90);
+
+    // recent strips
+    var kE = Math.min(total, st.more.eo ? MORE : LESS), kO = Math.min(total, st.more.ou ? MORE : LESS), kM = Math.min(total, st.more.md ? MORE : LESS);
+    var eo = st.buf.slice(total - kE).map(function (v) { return v % 2 === 0 ? ['good', 'E'] : ['bad', 'O']; });
+    var ou = st.buf.slice(total - kO).map(function (v) { return v < b ? ['good', 'U'] : v === b ? ['neutral', '='] : ['bad', 'O']; });
+    var mdv = st.buf.slice(total - kM).map(function (v) { return v === md ? ['warn', 'M'] : ['hollow', 'D']; });
+    dots($('eo-dots'), eo); dots($('ou-dots'), ou); dots($('md-dots'), mdv);
+    $('eo-run').textContent = runText(eo, { E: 'Even', O: 'Odd' });
+    $('ou-run').textContent = runText(ou, { U: 'Under', '=': 'Equal', O: 'Over' });
+    $('md-run').textContent = runText(mdv, { M: 'Match', D: 'Differ' });
+    $('eo-more').textContent = st.more.eo ? 'Less' : 'More';
+    $('ou-more').textContent = st.more.ou ? 'Less' : 'More';
+    $('md-more').textContent = st.more.md ? 'Less' : 'More';
+
+    // match gaps inside the window
+    var since = -1, gap = 0, run = 0;
+    for (i = 0; i < s.length; i++) { if (s[i] === md) { if (run > gap) gap = run; run = 0; } else run++; }
+    if (run > gap) gap = run;
+    for (i = s.length - 1; i >= 0; i--) if (s[i] === md) { since = s.length - 1 - i; break; }
+    $('md-since').textContent = !n ? '-' : since < 0 ? 'not in window' : since === 0 ? 'this tick' : since + ' ticks ago';
+    $('md-gap').textContent = n ? gap + ' ticks' : '-';
+  }
+
+  /* ---------- events ---------- */
+  marketSel.addEventListener('change', function () { st.symbol = marketSel.value; save('symbol', st.symbol); start(); });
+  function setWin(v) {
+    v = parseInt(v, 10);
+    if (isNaN(v)) v = st.win;
+    v = Math.max(50, Math.min(MAX, v));
+    st.win = v; $('win').value = v; save('win', v);
+    Array.prototype.forEach.call($('chips').children, function (c) { c.setAttribute('aria-pressed', String(parseInt(c.dataset.w, 10) === v)); });
+    schedule();
+  }
+  $('win').addEventListener('change', function () { setWin($('win').value); });
+  $('chips').addEventListener('click', function (e) { var c = e.target.closest('.chip'); if (c) setWin(c.dataset.w); });
+  $('barrier').addEventListener('change', function () { st.barrier = parseInt($('barrier').value, 10); save('barrier', st.barrier); schedule(); });
+  $('mdigit').addEventListener('change', function () { st.mdigit = parseInt($('mdigit').value, 10); save('mdigit', st.mdigit); schedule(); });
+  ['eo', 'ou', 'md'].forEach(function (k) {
+    $(k + '-more').addEventListener('click', function () { st.more[k] = !st.more[k]; schedule(); });
+  });
+  $('demo').addEventListener('change', function () { st.demo = $('demo').checked; start(); });
+  $('retry').addEventListener('click', start);
+  $('usedemo').addEventListener('click', function () { st.demo = true; $('demo').checked = true; start(); });
+
+  setWin(st.win);
+  start();
+})();
+</script>
+</body>
+</html>
